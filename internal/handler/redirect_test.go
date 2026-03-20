@@ -1,14 +1,14 @@
 package handler
 
 import (
-	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gofiber/fiber/v2"
 	"github.com/quangdangfit/url-shortener/internal/model"
 )
 
@@ -32,11 +32,10 @@ func (m *mockAnalytics) GetStats(code string) (int64, []model.ClickCount, error)
 	return 0, nil, nil
 }
 
-func newChiRequest(method, path, code string) *http.Request {
-	req := httptest.NewRequest(method, path, nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("code", code)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+func newFiberApp(code string, handler func(*fiber.Ctx) error) *fiber.App {
+	app := fiber.New()
+	app.Get(fmt.Sprintf("/%s", code), handler)
+	return app
 }
 
 // --- tests ---
@@ -56,16 +55,19 @@ func TestRedirectHandle_Success(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, ma)
 
-	req := newChiRequest(http.MethodGet, "/abc123", "abc123")
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
+
+	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
 	req.Header.Set("X-Forwarded-For", "10.0.0.1")
-	w := httptest.NewRecorder()
 
-	h.Handle(w, req)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusMovedPermanently {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusMovedPermanently)
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
 	}
-	if loc := w.Header().Get("Location"); loc != "https://example.com" {
+	if loc := resp.Header.Get("Location"); loc != "https://example.com" {
 		t.Errorf("location = %q", loc)
 	}
 	if recordedCode != "abc123" {
@@ -90,14 +92,17 @@ func TestRedirectHandle_FallbackIP(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, ma)
 
-	req := newChiRequest(http.MethodGet, "/abc123", "abc123")
-	// No X-Forwarded-For, should fall back to RemoteAddr
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
+	// No X-Forwarded-For, should fall back to c.IP()
 
-	if w.Code != http.StatusMovedPermanently {
-		t.Errorf("status = %d", w.Code)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Errorf("status = %d", resp.StatusCode)
 	}
 	if recordedIP == "" {
 		t.Error("expected IP from RemoteAddr")
@@ -110,13 +115,16 @@ func TestRedirectHandle_NotFound(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/nope", "nope")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/nope", nil)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 
@@ -126,13 +134,16 @@ func TestRedirectHandle_ResolveError(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/abc", nil)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
@@ -145,13 +156,16 @@ func TestRedirectHandle_Expired(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/abc", nil)
 
-	if w.Code != http.StatusGone {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusGone)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusGone {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusGone)
 	}
 }
 
@@ -164,12 +178,15 @@ func TestRedirectHandle_NotExpired(t *testing.T) {
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/abc", nil)
 
-	if w.Code != http.StatusMovedPermanently {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusMovedPermanently)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
 	}
 }

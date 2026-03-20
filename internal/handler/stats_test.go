@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/quangdangfit/url-shortener/internal/model"
 )
 
@@ -32,42 +33,45 @@ func TestStatsHandle_Success(t *testing.T) {
 	}
 	h := NewStatsHandler(ms, ma)
 
-	req := newChiRequest(http.MethodGet, "/stats/abc123", "abc123")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/stats/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/stats/abc123", nil)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	var resp statsResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	var result statsResponse
+	json.NewDecoder(resp.Body).Decode(&result)
 
-	if resp.Code != "abc123" {
-		t.Errorf("code = %q", resp.Code)
+	if result.Code != "abc123" {
+		t.Errorf("code = %q", result.Code)
 	}
-	if resp.OriginalURL != "https://example.com" {
-		t.Errorf("original_url = %q", resp.OriginalURL)
+	if result.OriginalURL != "https://example.com" {
+		t.Errorf("original_url = %q", result.OriginalURL)
 	}
-	if resp.TotalClicks != 42 {
-		t.Errorf("total_clicks = %d", resp.TotalClicks)
+	if result.TotalClicks != 42 {
+		t.Errorf("total_clicks = %d", result.TotalClicks)
 	}
-	if len(resp.ClicksByDay) != 3 {
-		t.Fatalf("clicks_by_day length = %d, want 3", len(resp.ClicksByDay))
+	if len(result.ClicksByDay) != 3 {
+		t.Fatalf("clicks_by_day length = %d, want 3", len(result.ClicksByDay))
 	}
 	// Verify sorted by date ascending
-	if resp.ClicksByDay[0].Date != "2024-01-01" {
-		t.Errorf("first day = %q, want 2024-01-01", resp.ClicksByDay[0].Date)
+	if result.ClicksByDay[0].Date != "2024-01-01" {
+		t.Errorf("first day = %q, want 2024-01-01", result.ClicksByDay[0].Date)
 	}
-	if resp.ClicksByDay[1].Date != "2024-01-02" {
-		t.Errorf("second day = %q, want 2024-01-02", resp.ClicksByDay[1].Date)
+	if result.ClicksByDay[1].Date != "2024-01-02" {
+		t.Errorf("second day = %q, want 2024-01-02", result.ClicksByDay[1].Date)
 	}
-	if resp.ClicksByDay[2].Date != "2024-01-03" {
-		t.Errorf("third day = %q, want 2024-01-03", resp.ClicksByDay[2].Date)
+	if result.ClicksByDay[2].Date != "2024-01-03" {
+		t.Errorf("third day = %q, want 2024-01-03", result.ClicksByDay[2].Date)
 	}
-	if resp.CreatedAt != "2024-01-01T00:00:00Z" {
-		t.Errorf("created_at = %q", resp.CreatedAt)
+	if result.CreatedAt != "2024-01-01T00:00:00Z" {
+		t.Errorf("created_at = %q", result.CreatedAt)
 	}
 }
 
@@ -84,19 +88,22 @@ func TestStatsHandle_EmptyCounts(t *testing.T) {
 	}
 	h := NewStatsHandler(ms, ma)
 
-	req := newChiRequest(http.MethodGet, "/stats/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/stats/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/stats/abc", nil)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d", w.Code)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d", resp.StatusCode)
 	}
 
-	var resp statsResponse
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp.TotalClicks != 0 {
-		t.Errorf("total_clicks = %d", resp.TotalClicks)
+	var result statsResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result.TotalClicks != 0 {
+		t.Errorf("total_clicks = %d", result.TotalClicks)
 	}
 }
 
@@ -106,13 +113,16 @@ func TestStatsHandle_NotFound(t *testing.T) {
 	}
 	h := NewStatsHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/stats/nope", "nope")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/stats/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/stats/nope", nil)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 
@@ -122,13 +132,16 @@ func TestStatsHandle_ResolveError(t *testing.T) {
 	}
 	h := NewStatsHandler(ms, &mockAnalytics{})
 
-	req := newChiRequest(http.MethodGet, "/stats/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/stats/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/stats/abc", nil)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
@@ -145,12 +158,15 @@ func TestStatsHandle_GetStatsError(t *testing.T) {
 	}
 	h := NewStatsHandler(ms, ma)
 
-	req := newChiRequest(http.MethodGet, "/stats/abc", "abc")
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Get("/stats/:code", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/stats/abc", nil)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }

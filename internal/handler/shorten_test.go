@@ -3,12 +3,14 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/quangdangfit/url-shortener/internal/model"
 )
 
@@ -41,27 +43,29 @@ func TestShortenHandle_Success(t *testing.T) {
 	}
 	h := NewShortenHandler(ms, "http://localhost:8080")
 
-	body := `{"url":"https://example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(body))
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
+
+	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(`{"url":"https://example.com"}`))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
 
-	h.Handle(w, req)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusCreated)
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 
-	var resp shortenResponse
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp.Code != "abc123" {
-		t.Errorf("code = %q", resp.Code)
+	var result shortenResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result.Code != "abc123" {
+		t.Errorf("code = %q", result.Code)
 	}
-	if resp.ShortURL != "http://localhost:8080/abc123" {
-		t.Errorf("short_url = %q", resp.ShortURL)
+	if result.ShortURL != "http://localhost:8080/abc123" {
+		t.Errorf("short_url = %q", result.ShortURL)
 	}
-	if resp.ExpiresAt != "" {
-		t.Errorf("expires_at = %q, want empty", resp.ExpiresAt)
+	if result.ExpiresAt != "" {
+		t.Errorf("expires_at = %q, want empty", result.ExpiresAt)
 	}
 }
 
@@ -79,19 +83,22 @@ func TestShortenHandle_WithTTL(t *testing.T) {
 	}
 	h := NewShortenHandler(ms, "http://localhost:8080")
 
-	body := `{"url":"https://example.com","ttl_days":7}`
-	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(body))
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(`{"url":"https://example.com","ttl_days":7}`))
+	req.Header.Set("Content-Type", "application/json")
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusCreated)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 
-	var resp shortenResponse
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp.ExpiresAt == "" {
+	var result shortenResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result.ExpiresAt == "" {
 		t.Error("expected expires_at to be set")
 	}
 }
@@ -99,41 +106,51 @@ func TestShortenHandle_WithTTL(t *testing.T) {
 func TestShortenHandle_InvalidJSON(t *testing.T) {
 	h := NewShortenHandler(&mockShortener{}, "http://localhost:8080")
 
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
+
 	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader("not json"))
-	w := httptest.NewRecorder()
+	req.Header.Set("Content-Type", "application/json")
 
-	h.Handle(w, req)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 
 func TestShortenHandle_EmptyURL(t *testing.T) {
 	h := NewShortenHandler(&mockShortener{}, "http://localhost:8080")
 
-	body := `{"url":""}`
-	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(body))
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(`{"url":""}`))
+	req.Header.Set("Content-Type", "application/json")
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 
 func TestShortenHandle_MissingURL(t *testing.T) {
 	h := NewShortenHandler(&mockShortener{}, "http://localhost:8080")
 
-	body := `{}`
-	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(body))
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 
@@ -145,30 +162,40 @@ func TestShortenHandle_ServiceError(t *testing.T) {
 	}
 	h := NewShortenHandler(ms, "http://localhost:8080")
 
-	body := `{"url":"https://example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(body))
-	w := httptest.NewRecorder()
+	app := fiber.New()
+	app.Post("/shorten", h.Handle)
 
-	h.Handle(w, req)
+	req := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(`{"url":"https://example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
 func TestWriteJSON(t *testing.T) {
-	w := httptest.NewRecorder()
-	writeJSON(w, http.StatusOK, map[string]string{"key": "value"})
+	app := fiber.New()
+	app.Get("/test", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"key": "value"})
+	})
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("content-type = %q", ct)
 	}
-	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp["key"] != "value" {
-		t.Errorf("body = %v", resp)
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]string
+	json.Unmarshal(body, &result)
+	if result["key"] != "value" {
+		t.Errorf("body = %v", result)
 	}
 }

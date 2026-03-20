@@ -1,4 +1,6 @@
-.PHONY: dev docker-up docker-down migrate seed bench lint
+.PHONY: dev docker-up docker-down migrate seed bench lint unittest
+
+SOURCE_PKGS := $(shell go list ./... | grep -v '/benchmark$$' | grep -v '/scripts$$' | tr '\n' ',')
 
 dev:
 	go run ./cmd/api
@@ -20,3 +22,6 @@ bench:
 
 lint:
 	golangci-lint run
+
+unittest:
+	go test -timeout 9000s -v -coverprofile=coverage.out -coverpkg=$(SOURCE_PKGS) ./... 2>&1 | tee report.out

@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"encoding/json"
 	"log/slog"
-	"net/http"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/quangdangfit/url-shortener/internal/service"
 )
 
@@ -28,23 +27,20 @@ type shortenResponse struct {
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
-func (h *ShortenHandler) Handle(w http.ResponseWriter, r *http.Request) {
+func (h *ShortenHandler) Handle(c *fiber.Ctx) error {
 	var req shortenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
 	if req.URL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url is required"})
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "url is required"})
 	}
 
 	u, err := h.shortener.Shorten(req.URL, req.TTLDays)
 	if err != nil {
 		slog.Error("failed to shorten url", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	resp := shortenResponse{
@@ -55,11 +51,5 @@ func (h *ShortenHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		resp.ExpiresAt = u.ExpiresAt.Format("2006-01-02T15:04:05Z")
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	return c.Status(fiber.StatusCreated).JSON(resp)
 }

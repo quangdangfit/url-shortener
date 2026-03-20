@@ -2,10 +2,9 @@ package handler
 
 import (
 	"log/slog"
-	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gofiber/fiber/v2"
 	"github.com/quangdangfit/url-shortener/internal/service"
 )
 
@@ -18,30 +17,27 @@ func NewRedirectHandler(shortener service.Shortener, analytics service.Analytics
 	return &RedirectHandler{shortener: shortener, analytics: analytics}
 }
 
-func (h *RedirectHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	code := chi.URLParam(r, "code")
+func (h *RedirectHandler) Handle(c *fiber.Ctx) error {
+	code := c.Params("code")
 
 	u, err := h.shortener.Resolve(code)
 	if err != nil {
 		slog.Error("failed to resolve url", "error", err, "code", code)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	if u == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not found"})
 	}
 	if u.ExpiresAt != nil && u.ExpiresAt.Before(time.Now().UTC()) {
-		writeJSON(w, http.StatusGone, map[string]string{"error": "link has expired"})
-		return
+		return c.Status(fiber.StatusGone).JSON(fiber.Map{"error": "link has expired"})
 	}
 
 	// Async record click - does not block redirect
-	ip := r.Header.Get("X-Forwarded-For")
+	ip := c.Get("X-Forwarded-For")
 	if ip == "" {
-		ip = r.RemoteAddr
+		ip = c.IP()
 	}
-	h.analytics.RecordClick(code, ip, r.UserAgent(), r.Referer())
+	h.analytics.RecordClick(code, ip, string(c.Request().Header.UserAgent()), c.Get("Referer"))
 
-	http.Redirect(w, r, u.Original, http.StatusMovedPermanently)
+	return c.Redirect(u.Original, fiber.StatusMovedPermanently)
 }

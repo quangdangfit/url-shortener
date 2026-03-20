@@ -2,6 +2,7 @@ services:
   scylla:
     image: scylladb/scylla:5.4
     container_name: scylla
+    restart: always
     ports:
       - "9042:9042"
     volumes:

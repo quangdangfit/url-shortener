@@ -1,13 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"log/slog"
-	"net/http"
 	"os"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/quangdangfit/url-shortener/internal/config"
 	"github.com/quangdangfit/url-shortener/internal/db"
 	"github.com/quangdangfit/url-shortener/internal/handler"
@@ -38,27 +37,26 @@ func main() {
 	redirectH := handler.NewRedirectHandler(shortenerSvc, analyticsSvc)
 	statsH := handler.NewStatsHandler(shortenerSvc, analyticsSvc)
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	app := fiber.New()
+	app.Use(logger.New())
+	app.Use(recover.New())
 
-	r.Post("/shorten", shortenH.Handle)
-	r.Get("/stats/{code}", statsH.Handle)
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	app.Post("/shorten", shortenH.Handle)
+	app.Get("/stats/:code", statsH.Handle)
+	app.Get("/health", func(c *fiber.Ctx) error {
 		scyllaStatus := "ok"
 		if err := db.HealthCheck(session); err != nil {
 			scyllaStatus = "error"
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		return c.JSON(fiber.Map{
 			"status": "ok",
 			"scylla": scyllaStatus,
 		})
 	})
-	r.Get("/{code}", redirectH.Handle)
+	app.Get("/:code", redirectH.Handle)
 
 	slog.Info("starting server", "port", cfg.ServerPort)
-	if err := http.ListenAndServe(":"+cfg.ServerPort, r); err != nil {
+	if err := app.Listen(":" + cfg.ServerPort); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
