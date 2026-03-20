@@ -11,21 +11,21 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
 // --- mock shortener ---
 
 type mockShortener struct {
-	shortenFn func(originalURL string, ttlDays *int) (*model.URL, error)
-	resolveFn func(code string) (*model.URL, error)
+	shortenFn func(originalURL string, ttlDays *int) (*domain.URL, error)
+	resolveFn func(code string) (*domain.URL, error)
 }
 
-func (m *mockShortener) Shorten(originalURL string, ttlDays *int) (*model.URL, error) {
+func (m *mockShortener) Shorten(originalURL string, ttlDays *int) (*domain.URL, error) {
 	return m.shortenFn(originalURL, ttlDays)
 }
 
-func (m *mockShortener) Resolve(code string) (*model.URL, error) {
+func (m *mockShortener) Resolve(code string) (*domain.URL, error) {
 	return m.resolveFn(code)
 }
 
@@ -33,8 +33,8 @@ func (m *mockShortener) Resolve(code string) (*model.URL, error) {
 
 func TestShortenHandle_Success(t *testing.T) {
 	ms := &mockShortener{
-		shortenFn: func(originalURL string, ttlDays *int) (*model.URL, error) {
-			return &model.URL{
+		shortenFn: func(originalURL string, ttlDays *int) (*domain.URL, error) {
+			return &domain.URL{
 				Code:      "abc123",
 				Original:  originalURL,
 				CreatedAt: time.Now().UTC(),
@@ -72,8 +72,8 @@ func TestShortenHandle_Success(t *testing.T) {
 func TestShortenHandle_WithTTL(t *testing.T) {
 	exp := time.Now().UTC().Add(7 * 24 * time.Hour)
 	ms := &mockShortener{
-		shortenFn: func(originalURL string, ttlDays *int) (*model.URL, error) {
-			return &model.URL{
+		shortenFn: func(originalURL string, ttlDays *int) (*domain.URL, error) {
+			return &domain.URL{
 				Code:      "abc123",
 				Original:  originalURL,
 				CreatedAt: time.Now().UTC(),
@@ -156,7 +156,7 @@ func TestShortenHandle_MissingURL(t *testing.T) {
 
 func TestShortenHandle_ServiceError(t *testing.T) {
 	ms := &mockShortener{
-		shortenFn: func(originalURL string, ttlDays *int) (*model.URL, error) {
+		shortenFn: func(originalURL string, ttlDays *int) (*domain.URL, error) {
 			return nil, errors.New("internal error")
 		},
 	}

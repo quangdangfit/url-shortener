@@ -4,27 +4,32 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
-type ClickRepository struct {
+type ScyllaClickRepository struct {
 	session *gocql.Session
 }
 
-func NewClickRepository(session *gocql.Session) *ClickRepository {
-	return &ClickRepository{session: session}
+func NewScyllaClickRepository(session *gocql.Session) *ScyllaClickRepository {
+	return &ScyllaClickRepository{session: session}
 }
 
-func (r *ClickRepository) InsertClick(c *model.Click) error {
+func (r *ScyllaClickRepository) InsertClick(c *domain.Click) error {
+	clickID, err := gocql.ParseUUID(c.ClickID)
+	if err != nil {
+		return fmt.Errorf("parse click id: %w", err)
+	}
+
 	query := `INSERT INTO clicks (code, bucket, clicked_at, click_id, country, device, referer)
 	           VALUES (?, ?, ?, ?, ?, ?, ?)`
-	if err := r.session.Query(query, c.Code, c.Bucket, c.ClickedAt, c.ClickID, c.Country, c.Device, c.Referer).Exec(); err != nil {
+	if err := r.session.Query(query, c.Code, c.Bucket, c.ClickedAt, clickID, c.Country, c.Device, c.Referer).Exec(); err != nil {
 		return fmt.Errorf("insert click: %w", err)
 	}
 	return nil
 }
 
-func (r *ClickRepository) IncrementCount(code, bucket string) error {
+func (r *ScyllaClickRepository) IncrementCount(code, bucket string) error {
 	query := `UPDATE click_counts SET total = total + 1 WHERE code = ? AND bucket = ?`
 	if err := r.session.Query(query, code, bucket).Exec(); err != nil {
 		return fmt.Errorf("increment click count: %w", err)
@@ -32,12 +37,12 @@ func (r *ClickRepository) IncrementCount(code, bucket string) error {
 	return nil
 }
 
-func (r *ClickRepository) GetClickCounts(code string, buckets []string) ([]model.ClickCount, error) {
+func (r *ScyllaClickRepository) GetClickCounts(code string, buckets []string) ([]domain.ClickCount, error) {
 	query := `SELECT code, bucket, total FROM click_counts WHERE code = ? AND bucket IN ?`
 	iter := r.session.Query(query, code, buckets).Iter()
 
-	var counts []model.ClickCount
-	var cc model.ClickCount
+	var counts []domain.ClickCount
+	var cc domain.ClickCount
 	for iter.Scan(&cc.Code, &cc.Bucket, &cc.Total) {
 		counts = append(counts, cc)
 	}
@@ -47,7 +52,7 @@ func (r *ClickRepository) GetClickCounts(code string, buckets []string) ([]model
 	return counts, nil
 }
 
-func (r *ClickRepository) GetTotalClicks(code string, buckets []string) (int64, error) {
+func (r *ScyllaClickRepository) GetTotalClicks(code string, buckets []string) (int64, error) {
 	counts, err := r.GetClickCounts(code, buckets)
 	if err != nil {
 		return 0, err

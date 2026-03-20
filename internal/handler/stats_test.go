@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
 func TestStatsHandle_Success(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{
 				Code:      code,
 				Original:  "https://example.com",
 				CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -23,8 +23,8 @@ func TestStatsHandle_Success(t *testing.T) {
 		},
 	}
 	ma := &mockAnalytics{
-		getStatsFn: func(code string) (int64, []model.ClickCount, error) {
-			return 42, []model.ClickCount{
+		getStatsFn: func(code string) (int64, []domain.ClickCount, error) {
+			return 42, []domain.ClickCount{
 				{Code: code, Bucket: "2024-01-03", Total: 20},
 				{Code: code, Bucket: "2024-01-01", Total: 10},
 				{Code: code, Bucket: "2024-01-02", Total: 12},
@@ -60,7 +60,6 @@ func TestStatsHandle_Success(t *testing.T) {
 	if len(result.ClicksByDay) != 3 {
 		t.Fatalf("clicks_by_day length = %d, want 3", len(result.ClicksByDay))
 	}
-	// Verify sorted by date ascending
 	if result.ClicksByDay[0].Date != "2024-01-01" {
 		t.Errorf("first day = %q, want 2024-01-01", result.ClicksByDay[0].Date)
 	}
@@ -77,12 +76,12 @@ func TestStatsHandle_Success(t *testing.T) {
 
 func TestStatsHandle_EmptyCounts(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
 		},
 	}
 	ma := &mockAnalytics{
-		getStatsFn: func(code string) (int64, []model.ClickCount, error) {
+		getStatsFn: func(code string) (int64, []domain.ClickCount, error) {
 			return 0, nil, nil
 		},
 	}
@@ -109,7 +108,7 @@ func TestStatsHandle_EmptyCounts(t *testing.T) {
 
 func TestStatsHandle_NotFound(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) { return nil, nil },
+		resolveFn: func(code string) (*domain.URL, error) { return nil, nil },
 	}
 	h := NewStatsHandler(ms, &mockAnalytics{})
 
@@ -128,7 +127,7 @@ func TestStatsHandle_NotFound(t *testing.T) {
 
 func TestStatsHandle_ResolveError(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) { return nil, errors.New("db error") },
+		resolveFn: func(code string) (*domain.URL, error) { return nil, errors.New("db error") },
 	}
 	h := NewStatsHandler(ms, &mockAnalytics{})
 
@@ -147,12 +146,12 @@ func TestStatsHandle_ResolveError(t *testing.T) {
 
 func TestStatsHandle_GetStatsError(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
 		},
 	}
 	ma := &mockAnalytics{
-		getStatsFn: func(code string) (int64, []model.ClickCount, error) {
+		getStatsFn: func(code string) (int64, []domain.ClickCount, error) {
 			return 0, nil, errors.New("stats error")
 		},
 	}

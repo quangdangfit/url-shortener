@@ -5,18 +5,18 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
-type URLRepository struct {
+type ScyllaURLRepository struct {
 	session *gocql.Session
 }
 
-func NewURLRepository(session *gocql.Session) *URLRepository {
-	return &URLRepository{session: session}
+func NewScyllaURLRepository(session *gocql.Session) *ScyllaURLRepository {
+	return &ScyllaURLRepository{session: session}
 }
 
-func (r *URLRepository) Create(u *model.URL) error {
+func (r *ScyllaURLRepository) Create(u *domain.URL) error {
 	query := `INSERT INTO urls (code, original, created_at, expires_at) VALUES (?, ?, ?, ?)`
 	if err := r.session.Query(query, u.Code, u.Original, u.CreatedAt, u.ExpiresAt).Exec(); err != nil {
 		return fmt.Errorf("insert url: %w", err)
@@ -24,9 +24,9 @@ func (r *URLRepository) Create(u *model.URL) error {
 	return nil
 }
 
-func (r *URLRepository) GetByCode(code string) (*model.URL, error) {
+func (r *ScyllaURLRepository) GetByCode(code string) (*domain.URL, error) {
 	query := `SELECT code, original, created_at, expires_at FROM urls WHERE code = ?`
-	var u model.URL
+	var u domain.URL
 	var expiresAt time.Time
 	err := r.session.Query(query, code).Scan(&u.Code, &u.Original, &u.CreatedAt, &expiresAt)
 	if err != nil {
@@ -41,7 +41,7 @@ func (r *URLRepository) GetByCode(code string) (*model.URL, error) {
 	return &u, nil
 }
 
-func (r *URLRepository) Exists(code string) (bool, error) {
+func (r *ScyllaURLRepository) Exists(code string) (bool, error) {
 	query := `SELECT code FROM urls WHERE code = ?`
 	var c string
 	err := r.session.Query(query, code).Scan(&c)

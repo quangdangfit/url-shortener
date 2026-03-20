@@ -4,15 +4,15 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/service"
+	"github.com/quangdangfit/url-shortener/internal/port"
 )
 
 type ShortenHandler struct {
-	shortener service.Shortener
+	shortener port.Shortener
 	baseURL   string
 }
 
-func NewShortenHandler(shortener service.Shortener, baseURL string) *ShortenHandler {
+func NewShortenHandler(shortener port.Shortener, baseURL string) *ShortenHandler {
 	return &ShortenHandler{shortener: shortener, baseURL: baseURL}
 }
 

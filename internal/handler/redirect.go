@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/service"
+	"github.com/quangdangfit/url-shortener/internal/port"
 )
 
 type RedirectHandler struct {
-	shortener service.Shortener
-	analytics service.Analytics
+	shortener port.Shortener
+	analytics port.Analytics
 }
 
-func NewRedirectHandler(shortener service.Shortener, analytics service.Analytics) *RedirectHandler {
+func NewRedirectHandler(shortener port.Shortener, analytics port.Analytics) *RedirectHandler {
 	return &RedirectHandler{shortener: shortener, analytics: analytics}
 }
 

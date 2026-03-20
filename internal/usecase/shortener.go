@@ -1,4 +1,4 @@
-package service
+package usecase
 
 import (
 	"crypto/rand"
@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/quangdangfit/url-shortener/internal/model"
-	"github.com/quangdangfit/url-shortener/internal/repository"
+	"github.com/quangdangfit/url-shortener/internal/domain"
+	"github.com/quangdangfit/url-shortener/internal/port"
 )
 
 const (
@@ -16,15 +16,15 @@ const (
 	maxRetries  = 10
 )
 
-type ShortenerService struct {
-	urlRepo repository.URLRepo
+type ShortenerUseCase struct {
+	urlRepo port.URLRepository
 }
 
-func NewShortenerService(urlRepo repository.URLRepo) *ShortenerService {
-	return &ShortenerService{urlRepo: urlRepo}
+func NewShortenerUseCase(urlRepo port.URLRepository) *ShortenerUseCase {
+	return &ShortenerUseCase{urlRepo: urlRepo}
 }
 
-func (s *ShortenerService) Shorten(originalURL string, ttlDays *int) (*model.URL, error) {
+func (s *ShortenerUseCase) Shorten(originalURL string, ttlDays *int) (*domain.URL, error) {
 	var code string
 	var err error
 	for i := 0; i < maxRetries; i++ {
@@ -42,7 +42,7 @@ func (s *ShortenerService) Shorten(originalURL string, ttlDays *int) (*model.URL
 	}
 
 	now := time.Now().UTC()
-	u := &model.URL{
+	u := &domain.URL{
 		Code:      code,
 		Original:  originalURL,
 		CreatedAt: now,
@@ -59,7 +59,7 @@ func (s *ShortenerService) Shorten(originalURL string, ttlDays *int) (*model.URL
 	return u, nil
 }
 
-func (s *ShortenerService) Resolve(code string) (*model.URL, error) {
+func (s *ShortenerUseCase) Resolve(code string) (*domain.URL, error) {
 	u, err := s.urlRepo.GetByCode(code)
 	if err != nil {
 		return nil, fmt.Errorf("resolve url: %w", err)

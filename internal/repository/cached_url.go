@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
+	"github.com/quangdangfit/url-shortener/internal/port"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -15,11 +16,11 @@ const (
 )
 
 type CachedURLRepository struct {
-	repo  URLRepo
+	repo  port.URLRepository
 	redis *redis.Client
 }
 
-func NewCachedURLRepository(repo URLRepo, redis *redis.Client) *CachedURLRepository {
+func NewCachedURLRepository(repo port.URLRepository, redis *redis.Client) *CachedURLRepository {
 	return &CachedURLRepository{repo: repo, redis: redis}
 }
 
@@ -31,7 +32,7 @@ func (r *CachedURLRepository) setField(ctx context.Context, code, original strin
 	r.redis.HExpire(ctx, cacheHashKey, cacheTTL, code)
 }
 
-func (r *CachedURLRepository) Create(u *model.URL) error {
+func (r *CachedURLRepository) Create(u *domain.URL) error {
 	if err := r.repo.Create(u); err != nil {
 		return err
 	}
@@ -40,11 +41,11 @@ func (r *CachedURLRepository) Create(u *model.URL) error {
 	return nil
 }
 
-func (r *CachedURLRepository) GetByCode(code string) (*model.URL, error) {
+func (r *CachedURLRepository) GetByCode(code string) (*domain.URL, error) {
 	ctx := context.Background()
 
 	if val, err := r.redis.HGet(ctx, cacheHashKey, code).Result(); err == nil {
-		return &model.URL{Code: code, Original: val}, nil
+		return &domain.URL{Code: code, Original: val}, nil
 	}
 
 	u, err := r.repo.GetByCode(code)

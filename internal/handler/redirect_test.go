@@ -2,21 +2,20 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
 // --- mock analytics ---
 
 type mockAnalytics struct {
 	recordClickFn func(code, ip, userAgent, referer string)
-	getStatsFn    func(code string) (int64, []model.ClickCount, error)
+	getStatsFn    func(code string) (int64, []domain.ClickCount, error)
 }
 
 func (m *mockAnalytics) RecordClick(code, ip, userAgent, referer string) {
@@ -25,17 +24,11 @@ func (m *mockAnalytics) RecordClick(code, ip, userAgent, referer string) {
 	}
 }
 
-func (m *mockAnalytics) GetStats(code string) (int64, []model.ClickCount, error) {
+func (m *mockAnalytics) GetStats(code string) (int64, []domain.ClickCount, error) {
 	if m.getStatsFn != nil {
 		return m.getStatsFn(code)
 	}
 	return 0, nil, nil
-}
-
-func newFiberApp(code string, handler func(*fiber.Ctx) error) *fiber.App {
-	app := fiber.New()
-	app.Get(fmt.Sprintf("/%s", code), handler)
-	return app
 }
 
 // --- tests ---
@@ -43,8 +36,8 @@ func newFiberApp(code string, handler func(*fiber.Ctx) error) *fiber.App {
 func TestRedirectHandle_Success(t *testing.T) {
 	var recordedCode, recordedIP string
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com"}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com"}, nil
 		},
 	}
 	ma := &mockAnalytics{
@@ -81,8 +74,8 @@ func TestRedirectHandle_Success(t *testing.T) {
 func TestRedirectHandle_FallbackIP(t *testing.T) {
 	var recordedIP string
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com"}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com"}, nil
 		},
 	}
 	ma := &mockAnalytics{
@@ -96,7 +89,6 @@ func TestRedirectHandle_FallbackIP(t *testing.T) {
 	app.Get("/:code", h.Handle)
 
 	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
-	// No X-Forwarded-For, should fall back to c.IP()
 
 	resp, _ := app.Test(req)
 	defer resp.Body.Close()
@@ -111,7 +103,7 @@ func TestRedirectHandle_FallbackIP(t *testing.T) {
 
 func TestRedirectHandle_NotFound(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) { return nil, nil },
+		resolveFn: func(code string) (*domain.URL, error) { return nil, nil },
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
@@ -130,7 +122,7 @@ func TestRedirectHandle_NotFound(t *testing.T) {
 
 func TestRedirectHandle_ResolveError(t *testing.T) {
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) { return nil, errors.New("db error") },
+		resolveFn: func(code string) (*domain.URL, error) { return nil, errors.New("db error") },
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
 
@@ -150,8 +142,8 @@ func TestRedirectHandle_ResolveError(t *testing.T) {
 func TestRedirectHandle_Expired(t *testing.T) {
 	past := time.Now().UTC().Add(-1 * time.Hour)
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com", ExpiresAt: &past}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com", ExpiresAt: &past}, nil
 		},
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})
@@ -172,8 +164,8 @@ func TestRedirectHandle_Expired(t *testing.T) {
 func TestRedirectHandle_NotExpired(t *testing.T) {
 	future := time.Now().UTC().Add(24 * time.Hour)
 	ms := &mockShortener{
-		resolveFn: func(code string) (*model.URL, error) {
-			return &model.URL{Code: code, Original: "https://example.com", ExpiresAt: &future}, nil
+		resolveFn: func(code string) (*domain.URL, error) {
+			return &domain.URL{Code: code, Original: "https://example.com", ExpiresAt: &future}, nil
 		},
 	}
 	h := NewRedirectHandler(ms, &mockAnalytics{})

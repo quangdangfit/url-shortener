@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/alicebob/miniredis/v2"
@@ -26,19 +26,19 @@ func setupMiniRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 // --- mock URLRepo ---
 
 type mockURLRepo struct {
-	createFn    func(u *model.URL) error
-	getByCodeFn func(code string) (*model.URL, error)
+	createFn    func(u *domain.URL) error
+	getByCodeFn func(code string) (*domain.URL, error)
 	existsFn    func(code string) (bool, error)
 }
 
-func (m *mockURLRepo) Create(u *model.URL) error {
+func (m *mockURLRepo) Create(u *domain.URL) error {
 	if m.createFn != nil {
 		return m.createFn(u)
 	}
 	return nil
 }
 
-func (m *mockURLRepo) GetByCode(code string) (*model.URL, error) {
+func (m *mockURLRepo) GetByCode(code string) (*domain.URL, error) {
 	if m.getByCodeFn != nil {
 		return m.getByCodeFn(code)
 	}
@@ -56,9 +56,9 @@ func TestCachedGetByCode_CacheMiss_ThenHit(t *testing.T) {
 	_, rdb := setupMiniRedis(t)
 	dbCalls := 0
 	mock := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) {
+		getByCodeFn: func(code string) (*domain.URL, error) {
 			dbCalls++
-			return &model.URL{
+			return &domain.URL{
 				Code:      code,
 				Original:  "https://example.com",
 				CreatedAt: time.Now().UTC(),
@@ -67,7 +67,6 @@ func TestCachedGetByCode_CacheMiss_ThenHit(t *testing.T) {
 	}
 	repo := NewCachedURLRepository(mock, rdb)
 
-	// First call: cache miss, hits DB
 	u, err := repo.GetByCode("abc123")
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +78,6 @@ func TestCachedGetByCode_CacheMiss_ThenHit(t *testing.T) {
 		t.Errorf("expected 1 DB call, got %d", dbCalls)
 	}
 
-	// Second call: cache hit, no DB call
 	u2, err := repo.GetByCode("abc123")
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +93,7 @@ func TestCachedGetByCode_CacheMiss_ThenHit(t *testing.T) {
 func TestCachedGetByCode_NotFound(t *testing.T) {
 	_, rdb := setupMiniRedis(t)
 	mock := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) {
+		getByCodeFn: func(code string) (*domain.URL, error) {
 			return nil, nil
 		},
 	}
@@ -109,7 +107,6 @@ func TestCachedGetByCode_NotFound(t *testing.T) {
 		t.Errorf("expected nil, got %+v", u)
 	}
 
-	// Verify nothing cached for not-found
 	exists, _ := rdb.HExists(context.Background(), cacheHashKey, "nope").Result()
 	if exists {
 		t.Error("should not cache not-found URLs")
@@ -120,15 +117,15 @@ func TestCachedCreate_PopulatesCache(t *testing.T) {
 	_, rdb := setupMiniRedis(t)
 	dbCalls := 0
 	mock := &mockURLRepo{
-		createFn: func(u *model.URL) error { return nil },
-		getByCodeFn: func(code string) (*model.URL, error) {
+		createFn: func(u *domain.URL) error { return nil },
+		getByCodeFn: func(code string) (*domain.URL, error) {
 			dbCalls++
-			return &model.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
+			return &domain.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
 		},
 	}
 	repo := NewCachedURLRepository(mock, rdb)
 
-	u := &model.URL{
+	u := &domain.URL{
 		Code:      "new123",
 		Original:  "https://example.com",
 		CreatedAt: time.Now().UTC(),
@@ -137,7 +134,6 @@ func TestCachedCreate_PopulatesCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// GetByCode should hit cache, not DB
 	result, err := repo.GetByCode("new123")
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +150,7 @@ func TestCachedExists_CacheHit(t *testing.T) {
 	_, rdb := setupMiniRedis(t)
 	dbCalls := 0
 	mock := &mockURLRepo{
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 		existsFn: func(code string) (bool, error) {
 			dbCalls++
 			return true, nil
@@ -162,8 +158,7 @@ func TestCachedExists_CacheHit(t *testing.T) {
 	}
 	repo := NewCachedURLRepository(mock, rdb)
 
-	// Create populates cache
-	repo.Create(&model.URL{Code: "exists1", Original: "https://example.com", CreatedAt: time.Now().UTC()})
+	repo.Create(&domain.URL{Code: "exists1", Original: "https://example.com", CreatedAt: time.Now().UTC()})
 
 	exists, err := repo.Exists("exists1")
 	if err != nil {
@@ -199,9 +194,9 @@ func TestCachedGetByCode_FieldTTL(t *testing.T) {
 	mr, rdb := setupMiniRedis(t)
 	dbCalls := 0
 	mock := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) {
+		getByCodeFn: func(code string) (*domain.URL, error) {
 			dbCalls++
-			return &model.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
+			return &domain.URL{Code: code, Original: "https://example.com", CreatedAt: time.Now().UTC()}, nil
 		},
 	}
 	repo := NewCachedURLRepository(mock, rdb)
@@ -211,13 +206,11 @@ func TestCachedGetByCode_FieldTTL(t *testing.T) {
 		t.Fatalf("expected 1 call, got %d", dbCalls)
 	}
 
-	// Cache hit before TTL
 	repo.GetByCode("ttl1")
 	if dbCalls != 1 {
 		t.Fatalf("expected 1 call (cached), got %d", dbCalls)
 	}
 
-	// Fast-forward past 5-min TTL — miniredis expires the field
 	mr.FastForward(6 * time.Minute)
 
 	repo.GetByCode("ttl1")
@@ -229,22 +222,19 @@ func TestCachedGetByCode_FieldTTL(t *testing.T) {
 func TestCachedGetByCode_SingleHashKey(t *testing.T) {
 	_, rdb := setupMiniRedis(t)
 	mock := &mockURLRepo{
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 	}
 	repo := NewCachedURLRepository(mock, rdb)
 
-	// Create multiple URLs
-	repo.Create(&model.URL{Code: "a1", Original: "https://a.com", CreatedAt: time.Now().UTC()})
-	repo.Create(&model.URL{Code: "b2", Original: "https://b.com", CreatedAt: time.Now().UTC()})
-	repo.Create(&model.URL{Code: "c3", Original: "https://c.com", CreatedAt: time.Now().UTC()})
+	repo.Create(&domain.URL{Code: "a1", Original: "https://a.com", CreatedAt: time.Now().UTC()})
+	repo.Create(&domain.URL{Code: "b2", Original: "https://b.com", CreatedAt: time.Now().UTC()})
+	repo.Create(&domain.URL{Code: "c3", Original: "https://c.com", CreatedAt: time.Now().UTC()})
 
-	// All stored under one hash key
 	size, _ := rdb.HLen(context.Background(), cacheHashKey).Result()
 	if size != 3 {
 		t.Errorf("hash size = %d, want 3", size)
 	}
 
-	// Verify plain URL values (no timestamp encoding)
 	val, _ := rdb.HGet(context.Background(), cacheHashKey, "a1").Result()
 	if val != "https://a.com" {
 		t.Errorf("cached value = %q, want plain URL", val)

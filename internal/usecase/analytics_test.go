@@ -1,4 +1,4 @@
-package service
+package usecase
 
 import (
 	"errors"
@@ -6,23 +6,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
 // --- mock click repo ---
 
 type mockClickRepo struct {
 	mu             sync.Mutex
-	insertedClicks []*model.Click
+	insertedClicks []*domain.Click
 	increments     []string // code:bucket
 	insertErr      error
 	incrementErr   error
-	clickCountsFn  func(code string, buckets []string) ([]model.ClickCount, error)
+	clickCountsFn  func(code string, buckets []string) ([]domain.ClickCount, error)
 	totalClicksFn  func(code string, buckets []string) (int64, error)
 	done           chan struct{}
 }
 
-func (m *mockClickRepo) InsertClick(c *model.Click) error {
+func (m *mockClickRepo) InsertClick(c *domain.Click) error {
 	m.mu.Lock()
 	m.insertedClicks = append(m.insertedClicks, c)
 	m.mu.Unlock()
@@ -39,7 +39,7 @@ func (m *mockClickRepo) IncrementCount(code, bucket string) error {
 	return m.incrementErr
 }
 
-func (m *mockClickRepo) GetClickCounts(code string, buckets []string) ([]model.ClickCount, error) {
+func (m *mockClickRepo) GetClickCounts(code string, buckets []string) ([]domain.ClickCount, error) {
 	if m.clickCountsFn != nil {
 		return m.clickCountsFn(code, buckets)
 	}
@@ -55,18 +55,18 @@ func (m *mockClickRepo) GetTotalClicks(code string, buckets []string) (int64, er
 
 // --- tests ---
 
-func TestNewAnalyticsService(t *testing.T) {
+func TestNewAnalyticsUseCase(t *testing.T) {
 	repo := &mockClickRepo{}
-	svc := NewAnalyticsService(repo)
+	svc := NewAnalyticsUseCase(repo)
 	if svc == nil {
-		t.Fatal("NewAnalyticsService returned nil")
+		t.Fatal("NewAnalyticsUseCase returned nil")
 	}
 }
 
 func TestRecordClick_Success(t *testing.T) {
 	done := make(chan struct{}, 2)
 	repo := &mockClickRepo{done: done}
-	svc := newAnalyticsService(repo, 100, 1)
+	svc := newAnalyticsUseCase(repo, 100, 1)
 
 	svc.RecordClick("abc123", "1.2.3.4", "Mozilla/5.0", "https://google.com")
 
@@ -100,7 +100,7 @@ func TestRecordClick_Success(t *testing.T) {
 func TestRecordClick_ChannelFull(t *testing.T) {
 	repo := &mockClickRepo{}
 	// Channel size 1, no workers to drain it
-	svc := newAnalyticsService(repo, 1, 0)
+	svc := newAnalyticsUseCase(repo, 1, 0)
 
 	// First call fills the channel
 	svc.RecordClick("abc", "1.1.1.1", "ua", "ref")
@@ -116,7 +116,7 @@ func TestRecordClick_WorkerHandlesErrors(t *testing.T) {
 		incrementErr: errors.New("increment fail"),
 		done:         done,
 	}
-	svc := newAnalyticsService(repo, 100, 1)
+	svc := newAnalyticsUseCase(repo, 100, 1)
 
 	svc.RecordClick("abc", "1.1.1.1", "ua", "ref")
 
@@ -137,14 +137,14 @@ func TestGetStats_Success(t *testing.T) {
 		totalClicksFn: func(code string, buckets []string) (int64, error) {
 			return 42, nil
 		},
-		clickCountsFn: func(code string, buckets []string) ([]model.ClickCount, error) {
-			return []model.ClickCount{
+		clickCountsFn: func(code string, buckets []string) ([]domain.ClickCount, error) {
+			return []domain.ClickCount{
 				{Code: "abc", Bucket: "2024-01-01", Total: 10},
 				{Code: "abc", Bucket: "2024-01-02", Total: 32},
 			}, nil
 		},
 	}
-	svc := newAnalyticsService(repo, 100, 0)
+	svc := newAnalyticsUseCase(repo, 100, 0)
 
 	total, counts, err := svc.GetStats("abc")
 	if err != nil {
@@ -164,7 +164,7 @@ func TestGetStats_TotalClicksError(t *testing.T) {
 			return 0, errors.New("db error")
 		},
 	}
-	svc := newAnalyticsService(repo, 100, 0)
+	svc := newAnalyticsUseCase(repo, 100, 0)
 
 	_, _, err := svc.GetStats("abc")
 	if err == nil {
@@ -177,11 +177,11 @@ func TestGetStats_ClickCountsError(t *testing.T) {
 		totalClicksFn: func(code string, buckets []string) (int64, error) {
 			return 10, nil
 		},
-		clickCountsFn: func(code string, buckets []string) ([]model.ClickCount, error) {
+		clickCountsFn: func(code string, buckets []string) ([]domain.ClickCount, error) {
 			return nil, errors.New("db error")
 		},
 	}
-	svc := newAnalyticsService(repo, 100, 0)
+	svc := newAnalyticsUseCase(repo, 100, 0)
 
 	_, _, err := svc.GetStats("abc")
 	if err == nil {

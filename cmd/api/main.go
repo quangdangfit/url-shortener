@@ -12,7 +12,7 @@ import (
 	"github.com/quangdangfit/url-shortener/internal/db"
 	"github.com/quangdangfit/url-shortener/internal/handler"
 	"github.com/quangdangfit/url-shortener/internal/repository"
-	"github.com/quangdangfit/url-shortener/internal/service"
+	"github.com/quangdangfit/url-shortener/internal/usecase"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -38,17 +38,17 @@ func main() {
 	slog.Info("connected to redis")
 
 	urlRepo := repository.NewCachedURLRepository(
-		repository.NewURLRepository(session),
+		repository.NewScyllaURLRepository(session),
 		rdb,
 	)
-	clickRepo := repository.NewClickRepository(session)
+	clickRepo := repository.NewScyllaClickRepository(session)
 
-	shortenerSvc := service.NewShortenerService(urlRepo)
-	analyticsSvc := service.NewAnalyticsService(clickRepo)
+	shortenerUC := usecase.NewShortenerUseCase(urlRepo)
+	analyticsUC := usecase.NewAnalyticsUseCase(clickRepo)
 
-	shortenH := handler.NewShortenHandler(shortenerSvc, cfg.BaseURL)
-	redirectH := handler.NewRedirectHandler(shortenerSvc, analyticsSvc)
-	statsH := handler.NewStatsHandler(shortenerSvc, analyticsSvc)
+	shortenH := handler.NewShortenHandler(shortenerUC, cfg.BaseURL)
+	redirectH := handler.NewRedirectHandler(shortenerUC, analyticsUC)
+	statsH := handler.NewStatsHandler(shortenerUC, analyticsUC)
 
 	app := fiber.New()
 	app.Use(logger.New())

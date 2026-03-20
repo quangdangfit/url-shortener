@@ -1,40 +1,40 @@
-package service
+package usecase
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/quangdangfit/url-shortener/internal/model"
+	"github.com/quangdangfit/url-shortener/internal/domain"
 )
 
 // --- mock URL repo ---
 
 type mockURLRepo struct {
-	createFn    func(u *model.URL) error
-	getByCodeFn func(code string) (*model.URL, error)
+	createFn    func(u *domain.URL) error
+	getByCodeFn func(code string) (*domain.URL, error)
 	existsFn    func(code string) (bool, error)
 }
 
-func (m *mockURLRepo) Create(u *model.URL) error                 { return m.createFn(u) }
-func (m *mockURLRepo) GetByCode(code string) (*model.URL, error) { return m.getByCodeFn(code) }
-func (m *mockURLRepo) Exists(code string) (bool, error)          { return m.existsFn(code) }
+func (m *mockURLRepo) Create(u *domain.URL) error                 { return m.createFn(u) }
+func (m *mockURLRepo) GetByCode(code string) (*domain.URL, error) { return m.getByCodeFn(code) }
+func (m *mockURLRepo) Exists(code string) (bool, error)           { return m.existsFn(code) }
 
 // --- tests ---
 
-func TestNewShortenerService(t *testing.T) {
+func TestNewShortenerUseCase(t *testing.T) {
 	repo := &mockURLRepo{}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 	if svc == nil {
-		t.Fatal("NewShortenerService returned nil")
+		t.Fatal("NewShortenerUseCase returned nil")
 	}
 }
 
 func TestShorten_Success(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return false, nil },
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	u, err := svc.Shorten("https://example.com", nil)
 	if err != nil {
@@ -57,9 +57,9 @@ func TestShorten_Success(t *testing.T) {
 func TestShorten_WithTTL(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return false, nil },
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	ttl := 7
 	u, err := svc.Shorten("https://example.com", &ttl)
@@ -74,9 +74,9 @@ func TestShorten_WithTTL(t *testing.T) {
 func TestShorten_WithZeroTTL(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return false, nil },
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	ttl := 0
 	u, err := svc.Shorten("https://example.com", &ttl)
@@ -92,7 +92,7 @@ func TestShorten_ExistsError(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return false, errors.New("db error") },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	_, err := svc.Shorten("https://example.com", nil)
 	if err == nil {
@@ -103,9 +103,9 @@ func TestShorten_ExistsError(t *testing.T) {
 func TestShorten_CreateError(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return false, nil },
-		createFn: func(u *model.URL) error { return errors.New("insert error") },
+		createFn: func(u *domain.URL) error { return errors.New("insert error") },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	_, err := svc.Shorten("https://example.com", nil)
 	if err == nil {
@@ -123,9 +123,9 @@ func TestShorten_CollisionRetry(t *testing.T) {
 			}
 			return false, nil
 		},
-		createFn: func(u *model.URL) error { return nil },
+		createFn: func(u *domain.URL) error { return nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	u, err := svc.Shorten("https://example.com", nil)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestShorten_MaxRetriesExceeded(t *testing.T) {
 	repo := &mockURLRepo{
 		existsFn: func(code string) (bool, error) { return true, nil }, // always collision
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	_, err := svc.Shorten("https://example.com", nil)
 	if err == nil {
@@ -152,11 +152,11 @@ func TestShorten_MaxRetriesExceeded(t *testing.T) {
 }
 
 func TestResolve_Success(t *testing.T) {
-	expected := &model.URL{Code: "abc123", Original: "https://example.com"}
+	expected := &domain.URL{Code: "abc123", Original: "https://example.com"}
 	repo := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) { return expected, nil },
+		getByCodeFn: func(code string) (*domain.URL, error) { return expected, nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	u, err := svc.Resolve("abc123")
 	if err != nil {
@@ -169,9 +169,9 @@ func TestResolve_Success(t *testing.T) {
 
 func TestResolve_NotFound(t *testing.T) {
 	repo := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) { return nil, nil },
+		getByCodeFn: func(code string) (*domain.URL, error) { return nil, nil },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	u, err := svc.Resolve("abc123")
 	if err != nil {
@@ -184,9 +184,9 @@ func TestResolve_NotFound(t *testing.T) {
 
 func TestResolve_Error(t *testing.T) {
 	repo := &mockURLRepo{
-		getByCodeFn: func(code string) (*model.URL, error) { return nil, errors.New("db error") },
+		getByCodeFn: func(code string) (*domain.URL, error) { return nil, errors.New("db error") },
 	}
-	svc := NewShortenerService(repo)
+	svc := NewShortenerUseCase(repo)
 
 	_, err := svc.Resolve("abc123")
 	if err == nil {

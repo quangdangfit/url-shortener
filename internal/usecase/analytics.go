@@ -1,4 +1,4 @@
-package service
+package usecase
 
 import (
 	"fmt"
@@ -6,30 +6,30 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
-	"github.com/quangdangfit/url-shortener/internal/model"
-	"github.com/quangdangfit/url-shortener/internal/repository"
+	"github.com/google/uuid"
+	"github.com/quangdangfit/url-shortener/internal/domain"
+	"github.com/quangdangfit/url-shortener/internal/port"
 )
 
-type AnalyticsService struct {
-	clickRepo repository.ClickRepo
-	clickCh   chan *model.Click
+type AnalyticsUseCase struct {
+	clickRepo port.ClickRepository
+	clickCh   chan *domain.Click
 }
 
-func NewAnalyticsService(clickRepo repository.ClickRepo) *AnalyticsService {
-	return newAnalyticsService(clickRepo, 10000, 4)
+func NewAnalyticsUseCase(clickRepo port.ClickRepository) *AnalyticsUseCase {
+	return newAnalyticsUseCase(clickRepo, 10000, 4)
 }
 
-func newAnalyticsService(clickRepo repository.ClickRepo, chanSize, numWorkers int) *AnalyticsService {
-	s := &AnalyticsService{
+func newAnalyticsUseCase(clickRepo port.ClickRepository, chanSize, numWorkers int) *AnalyticsUseCase {
+	s := &AnalyticsUseCase{
 		clickRepo: clickRepo,
-		clickCh:   make(chan *model.Click, chanSize),
+		clickCh:   make(chan *domain.Click, chanSize),
 	}
 	s.startWorkers(numWorkers)
 	return s
 }
 
-func (s *AnalyticsService) startWorkers(n int) {
+func (s *AnalyticsUseCase) startWorkers(n int) {
 	for i := 0; i < n; i++ {
 		go func() {
 			for click := range s.clickCh {
@@ -44,13 +44,13 @@ func (s *AnalyticsService) startWorkers(n int) {
 	}
 }
 
-func (s *AnalyticsService) RecordClick(code, ip, userAgent, referer string) {
+func (s *AnalyticsUseCase) RecordClick(code, ip, userAgent, referer string) {
 	now := time.Now().UTC()
-	click := &model.Click{
+	click := &domain.Click{
 		Code:      code,
 		Bucket:    now.Format("2006-01-02"),
 		ClickedAt: now,
-		ClickID:   gocql.TimeUUID(),
+		ClickID:   uuid.New().String(),
 		Country:   ip,
 		Device:    detectDevice(userAgent),
 		Referer:   referer,
@@ -63,7 +63,7 @@ func (s *AnalyticsService) RecordClick(code, ip, userAgent, referer string) {
 	}
 }
 
-func (s *AnalyticsService) GetStats(code string) (int64, []model.ClickCount, error) {
+func (s *AnalyticsUseCase) GetStats(code string) (int64, []domain.ClickCount, error) {
 	buckets := last30DaysBuckets()
 
 	total, err := s.clickRepo.GetTotalClicks(code, buckets)

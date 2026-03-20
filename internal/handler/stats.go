@@ -5,15 +5,15 @@ import (
 	"sort"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/quangdangfit/url-shortener/internal/service"
+	"github.com/quangdangfit/url-shortener/internal/port"
 )
 
 type StatsHandler struct {
-	shortener service.Shortener
-	analytics service.Analytics
+	shortener port.Shortener
+	analytics port.Analytics
 }
 
-func NewStatsHandler(shortener service.Shortener, analytics service.Analytics) *StatsHandler {
+func NewStatsHandler(shortener port.Shortener, analytics port.Analytics) *StatsHandler {
 	return &StatsHandler{shortener: shortener, analytics: analytics}
 }
 
