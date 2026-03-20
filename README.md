@@ -3,32 +3,64 @@
 [![CI](https://github.com/quangdangfit/url-shortener/actions/workflows/ci.yml/badge.svg)](https://github.com/quangdangfit/url-shortener/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/quangdangfit/url-shortener/branch/main/graph/badge.svg)](https://codecov.io/gh/quangdangfit/url-shortener)
 
-A high-performance URL shortening service with click analytics, built with Go and ScyllaDB.
+A high-performance URL shortening service with click analytics, built with Go, ScyllaDB, and Redis.
 
 ## Tech Stack
 
 - **Language:** Go 1.24+
 - **HTTP Framework:** [Fiber](https://gofiber.io/)
 - **Database:** [ScyllaDB](https://www.scylladb.com/) (Cassandra-compatible)
+- **Cache:** [Redis](https://redis.io/) (per-field TTL via `HEXPIRE`)
 - **Driver:** [scylladb/gocql](https://github.com/scylladb/gocql)
-- **Config:** Environment variables via [godotenv](https://github.com/joho/godotenv)
 
 ## Architecture
 
+The project follows **Clean Architecture** with strict dependency inversion — all dependencies point inward toward the domain layer.
+
 ```
 cmd/
-└── api/main.go              # Fiber server entrypoint
-└── migrate/main.go          # Database migration runner
+├── api/main.go                  # Entrypoint, dependency wiring
+└── migrate/main.go              # Database migration runner
+
 internal/
-├── config/                  # Environment configuration
-├── db/                      # ScyllaDB session & migrations
-├── handler/                 # HTTP handlers (shorten, redirect, stats)
-├── model/                   # Data models (URL, Click)
-├── repository/              # ScyllaDB data access layer
-└── service/                 # Business logic (shortener, analytics)
-benchmark/                   # Performance benchmarks
-scripts/                     # Seed data generator
+├── domain/                      # Entities (zero external dependencies)
+│   ├── url.go                   #   URL entity
+│   └── click.go                 #   Click, ClickCount entities
+│
+├── port/                        # Port interfaces (Dependency Inversion)
+│   ├── service.go               #   Shortener, Analytics
+│   └── repository.go            #   URLRepository, ClickRepository
+│
+├── usecase/                     # Use cases (business logic)
+│   ├── shortener.go             #   URL shortening & resolution
+│   └── analytics.go             #   Async click tracking & stats
+│
+├── handler/                     # Primary adapter (HTTP)
+│   ├── shorten.go               #   POST /shorten
+│   ├── redirect.go              #   GET /:code
+│   └── stats.go                 #   GET /stats/:code
+│
+├── repository/                  # Secondary adapter (data access)
+│   ├── scylla_url.go            #   ScyllaDB URL storage
+│   ├── scylla_click.go          #   ScyllaDB click storage
+│   └── cached_url.go            #   Redis-cached URL (decorator)
+│
+├── config/                      # Environment configuration
+└── db/                          # ScyllaDB session & migrations
+
+benchmark/                       # Performance benchmarks
+scripts/                         # Seed data generator
 ```
+
+**Dependency flow:**
+
+```
+handler ──→ port ←── usecase
+              ↑
+          repository
+```
+
+Handlers and repositories depend on `port` interfaces — never on each other or on concrete implementations.
 
 ## Getting Started
 
@@ -37,13 +69,13 @@ scripts/                     # Seed data generator
 - Go 1.24+
 - Docker & Docker Compose
 
-### Run ScyllaDB
+### Run Infrastructure
 
 ```bash
 make docker-up
 ```
 
-Wait for ScyllaDB to be healthy, then run migrations:
+Wait for ScyllaDB and Redis to be healthy, then run migrations:
 
 ```bash
 make migrate
@@ -58,11 +90,9 @@ make dev
 
 The server starts at `http://localhost:8080`.
 
-## API Endpoints
+## API
 
 ### POST /shorten
-
-Create a short URL.
 
 ```bash
 curl -X POST http://localhost:8080/shorten \
@@ -78,24 +108,20 @@ curl -X POST http://localhost:8080/shorten \
 }
 ```
 
-- Generates a 6-character Base62 code with collision detection
+- 6-character Base62 code with collision retry
 - `ttl_days` is optional; omit for no expiry
 
 ### GET /:code
-
-Redirect to the original URL.
 
 ```bash
 curl -L http://localhost:8080/xK9a2b
 ```
 
-- Returns `301 Moved Permanently`
-- Returns `404` if not found, `410 Gone` if expired
-- Records click analytics asynchronously (does not block redirect)
+- `301` redirect to original URL
+- `404` if not found, `410` if expired
+- Click analytics recorded asynchronously
 
 ### GET /stats/:code
-
-Get click analytics for a short URL.
 
 ```bash
 curl http://localhost:8080/stats/xK9a2b
@@ -117,7 +143,7 @@ curl http://localhost:8080/stats/xK9a2b
 ### GET /health
 
 ```json
-{ "status": "ok", "scylla": "ok" }
+{ "status": "ok", "scylla": "ok", "redis": "ok" }
 ```
 
 ## Configuration
@@ -127,25 +153,19 @@ curl http://localhost:8080/stats/xK9a2b
 | `SCYLLA_HOSTS` | `localhost:9042` | ScyllaDB contact points |
 | `SCYLLA_KEYSPACE` | `urlshortener` | Keyspace name |
 | `SCYLLA_CONSISTENCY` | `LOCAL_QUORUM` | Consistency level |
+| `REDIS_URI` | `localhost:6379` | Redis address |
 | `SERVER_PORT` | `8080` | HTTP server port |
 | `BASE_URL` | `http://localhost:8080` | Base URL for short links |
 
 ## Docker
 
-### Build
-
 ```bash
+# Build
 docker build -t url-shortener .
-```
 
-### Run with Docker Compose
-
-```bash
-make docker-up
-make migrate
-docker run --rm --network host \
-  -e SCYLLA_HOSTS=localhost:9042 \
-  url-shortener
+# Run (after docker-compose infra is up)
+make docker-up && make migrate
+docker run --rm --network host url-shortener
 ```
 
 ## Makefile
@@ -153,8 +173,8 @@ docker run --rm --network host \
 | Command | Description |
 |---|---|
 | `make dev` | Run API locally |
-| `make docker-up` | Start ScyllaDB container |
-| `make docker-down` | Stop ScyllaDB container |
+| `make docker-up` | Start ScyllaDB + Redis |
+| `make docker-down` | Stop containers |
 | `make migrate` | Run database migrations |
 | `make seed` | Insert fake data for benchmarking |
 | `make unittest` | Run tests with coverage |
@@ -165,16 +185,17 @@ docker run --rm --network host \
 
 ScyllaDB tables designed for high write throughput and partition-aware queries:
 
-- **urls** - Short code to original URL mapping (partition key: `code`)
-- **clicks** - Individual click events, partitioned by `(code, bucket)` where bucket = `YYYY-MM-DD`, with 90-day TTL
-- **click_counts** - Counter table for fast aggregation per code per day
+- **urls** — short code → original URL mapping (partition key: `code`)
+- **clicks** — click events partitioned by `(code, bucket)` where bucket = `YYYY-MM-DD`, 90-day TTL
+- **click_counts** — counter table for fast per-day aggregation
 
 ## Design Decisions
 
-- **Async analytics:** Click events are written via a buffered channel with a goroutine worker pool, ensuring redirects are never blocked by analytics writes
-- **Time-bucketed partitions:** Click data is partitioned by date to prevent unbounded partition growth
-- **Counter tables:** Separate counter table avoids scanning the clicks table for totals
-- **Base62 codes:** 6-character codes give ~56 billion unique combinations with collision retry
+- **Clean Architecture** — domain entities have zero external dependencies; all cross-layer communication goes through port interfaces, making every layer independently testable and replaceable
+- **Redis cache** — single hash key `urls` with per-field `HEXPIRE` (5 min TTL); decorator pattern over `URLRepository` so caching is transparent to the use case layer
+- **Async analytics** — buffered channel + goroutine worker pool ensures redirects are never blocked by click writes
+- **Time-bucketed partitions** — click data partitioned by date to prevent unbounded partition growth
+- **Counter tables** — separate counter table avoids full-scanning the clicks table for totals
 
 ## License
 
