@@ -9,11 +9,11 @@ import (
 )
 
 type ShortenHandler struct {
-	shortener *service.ShortenerService
+	shortener service.Shortener
 	baseURL   string
 }
 
-func NewShortenHandler(shortener *service.ShortenerService, baseURL string) *ShortenHandler {
+func NewShortenHandler(shortener service.Shortener, baseURL string) *ShortenHandler {
 	return &ShortenHandler{shortener: shortener, baseURL: baseURL}
 }
 

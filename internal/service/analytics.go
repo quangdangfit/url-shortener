@@ -12,16 +12,20 @@ import (
 )
 
 type AnalyticsService struct {
-	clickRepo *repository.ClickRepository
+	clickRepo repository.ClickRepo
 	clickCh   chan *model.Click
 }
 
-func NewAnalyticsService(clickRepo *repository.ClickRepository) *AnalyticsService {
+func NewAnalyticsService(clickRepo repository.ClickRepo) *AnalyticsService {
+	return newAnalyticsService(clickRepo, 10000, 4)
+}
+
+func newAnalyticsService(clickRepo repository.ClickRepo, chanSize, numWorkers int) *AnalyticsService {
 	s := &AnalyticsService{
 		clickRepo: clickRepo,
-		clickCh:   make(chan *model.Click, 10000),
+		clickCh:   make(chan *model.Click, chanSize),
 	}
-	s.startWorkers(4)
+	s.startWorkers(numWorkers)
 	return s
 }
 

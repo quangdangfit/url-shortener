@@ -10,11 +10,11 @@ import (
 )
 
 type RedirectHandler struct {
-	shortener *service.ShortenerService
-	analytics *service.AnalyticsService
+	shortener service.Shortener
+	analytics service.Analytics
 }
 
-func NewRedirectHandler(shortener *service.ShortenerService, analytics *service.AnalyticsService) *RedirectHandler {
+func NewRedirectHandler(shortener service.Shortener, analytics service.Analytics) *RedirectHandler {
 	return &RedirectHandler{shortener: shortener, analytics: analytics}
 }
 

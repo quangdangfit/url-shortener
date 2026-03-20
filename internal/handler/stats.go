@@ -10,11 +10,11 @@ import (
 )
 
 type StatsHandler struct {
-	shortener *service.ShortenerService
-	analytics *service.AnalyticsService
+	shortener service.Shortener
+	analytics service.Analytics
 }
 
-func NewStatsHandler(shortener *service.ShortenerService, analytics *service.AnalyticsService) *StatsHandler {
+func NewStatsHandler(shortener service.Shortener, analytics service.Analytics) *StatsHandler {
 	return &StatsHandler{shortener: shortener, analytics: analytics}
 }
 

@@ -17,10 +17,10 @@ const (
 )
 
 type ShortenerService struct {
-	urlRepo *repository.URLRepository
+	urlRepo repository.URLRepo
 }
 
-func NewShortenerService(urlRepo *repository.URLRepository) *ShortenerService {
+func NewShortenerService(urlRepo repository.URLRepo) *ShortenerService {
 	return &ShortenerService{urlRepo: urlRepo}
 }
 
