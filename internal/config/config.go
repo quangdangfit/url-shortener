@@ -11,6 +11,7 @@ type Config struct {
 	ScyllaHosts       []string
 	ScyllaKeyspace    string
 	ScyllaConsistency string
+	RedisURI          string
 	ServerPort        string
 	BaseURL           string
 }
@@ -22,6 +23,7 @@ func Load() *Config {
 		ScyllaHosts:       strings.Split(getEnv("SCYLLA_HOSTS", "localhost:9042"), ","),
 		ScyllaKeyspace:    getEnv("SCYLLA_KEYSPACE", "urlshortener"),
 		ScyllaConsistency: getEnv("SCYLLA_CONSISTENCY", "LOCAL_QUORUM"),
+		RedisURI:          getEnv("REDIS_URI", "localhost:6379"),
 		ServerPort:        getEnv("SERVER_PORT", "8080"),
 		BaseURL:           getEnv("BASE_URL", "http://localhost:8080"),
 	}

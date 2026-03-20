@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/quangdangfit/url-shortener/internal/handler"
 	"github.com/quangdangfit/url-shortener/internal/repository"
 	"github.com/quangdangfit/url-shortener/internal/service"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -27,7 +29,18 @@ func main() {
 	defer session.Close()
 	slog.Info("connected to scylla")
 
-	urlRepo := repository.NewURLRepository(session)
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisURI})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		slog.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
+	slog.Info("connected to redis")
+
+	urlRepo := repository.NewCachedURLRepository(
+		repository.NewURLRepository(session),
+		rdb,
+	)
 	clickRepo := repository.NewClickRepository(session)
 
 	shortenerSvc := service.NewShortenerService(urlRepo)
@@ -48,9 +61,14 @@ func main() {
 		if err := db.HealthCheck(session); err != nil {
 			scyllaStatus = "error"
 		}
+		redisStatus := "ok"
+		if err := rdb.Ping(context.Background()).Err(); err != nil {
+			redisStatus = "error"
+		}
 		return c.JSON(fiber.Map{
 			"status": "ok",
 			"scylla": scyllaStatus,
+			"redis":  redisStatus,
 		})
 	})
 	app.Get("/:code", redirectH.Handle)
