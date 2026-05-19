@@ -49,6 +49,14 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
 
+      - name: Sanitize artifact name
+        id: artifact
+        run: |
+          # Replace / with - in platform name for artifact name
+          platform="${{ matrix.platform }}"
+          sanitized="${platform//\//-}"
+          echo "name=digest-$sanitized" >> "$GITHUB_OUTPUT"
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
@@ -68,7 +76,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ steps.pair.outputs.key }}
+          name: ${{ steps.artifact.outputs.name }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
