@@ -54,8 +54,12 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 
-	app.Post("/shorten", shortenH.Handle)
-	app.Get("/stats/:code", statsH.Handle)
+	// Frontend handler
+	frontendH := handler.NewFrontendHandler(shortenerUC, analyticsUC, cfg.BaseURL)
+
+	// API routes
+	app.Post("/api/shorten", shortenH.Handle)
+	app.Get("/api/stats/:code", statsH.Handle)
 	app.Get("/health", func(c *fiber.Ctx) error {
 		scyllaStatus := "ok"
 		if err := db.HealthCheck(session); err != nil {
@@ -71,7 +75,15 @@ func main() {
 			"redis":  redisStatus,
 		})
 	})
+
+	// Frontend routes
+	app.Get("/", frontendH.ServeIndex)
+	app.Post("/shorten", frontendH.HandleShorten)
+	app.Get("/stats/:code", frontendH.ServeStats)
 	app.Get("/:code", redirectH.Handle)
+
+	// Static files
+	handler.SetupStaticFiles(app)
 
 	slog.Info("starting server", "port", cfg.ServerPort)
 	if err := app.Listen(":" + cfg.ServerPort); err != nil {

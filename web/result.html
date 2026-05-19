@@ -1,0 +1,42 @@
+<div class="result-box">
+    <h5 class="mb-3">Your Shortened URL</h5>
+    <div class="input-group mb-3">
+        <input type="text" class="form-control" id="short-url" value="{{.ShortURL}}" readonly>
+        <button class="btn btn-outline-primary copy-btn" type="button" onclick="copyToClipboard()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+            </svg>
+            Copy
+        </button>
+    </div>
+    <div class="d-flex justify-content-between text-muted small">
+        <span>Original: <a href="{{.OriginalURL}}" target="_blank" class="text-truncate d-inline-block" style="max-width: 300px;">{{.OriginalURL}}</a></span>
+        <a href="/stats/{{.Code}}" class="text-decoration-none">View Stats</a>
+    </div>
+    {{if .ExpiresAt}}
+    <div class="mt-2 text-warning small">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-clock" viewBox="0 0 16 16">
+            <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .25.4l3.5 1.5a.5.5 0 0 0 .5-.8l-3-1.25V3.5z"/>
+            <path d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
+        </svg>
+        Expires: {{.ExpiresAt}}
+    </div>
+    {{end}}
+</div>
+
+<script>
+function copyToClipboard() {
+    const copyText = document.getElementById("short-url");
+    copyText.select();
+    copyText.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(copyText.value);
+    
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copied!';
+    setTimeout(() => {
+        btn.innerHTML = originalHTML;
+    }, 2000);
+}
+</script>

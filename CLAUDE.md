@@ -1,9 +1,6 @@
-# URL Shortener
+# URL Shortener - HTMX Frontend
 
-[![CI](https://github.com/quangdangfit/url-shortener/actions/workflows/ci.yml/badge.svg)](https://github.com/quangdangfit/url-shortener/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/quangdangfit/url-shortener/branch/main/graph/badge.svg)](https://codecov.io/gh/quangdangfit/url-shortener)
-
-A high-performance URL shortening service with click analytics, built with Go, ScyllaDB, and Redis.
+A high-performance URL shortening service with click analytics, built with Go, ScyllaDB, and Redis. This project includes an HTMX-based frontend for a modern, single-page user experience.
 
 ## Tech Stack
 
@@ -11,7 +8,8 @@ A high-performance URL shortening service with click analytics, built with Go, S
 - **HTTP Framework:** [Fiber](https://gofiber.io/)
 - **Database:** [ScyllaDB](https://www.scylladb.com/) (Cassandra-compatible)
 - **Cache:** [Redis](https://redis.io/) (per-field TTL via `HEXPIRE`)
-- **Driver:** [scylladb/gocql](https://github.com/scylladb/gocql)
+- **Frontend:** [HTMX](https://htmx.org/) + Bootstrap 5
+- **Charts:** Chart.js
 
 ## Architecture
 
@@ -36,9 +34,10 @@ internal/
 │   └── analytics.go             #   Async click tracking & stats
 │
 ├── handler/                     # Primary adapter (HTTP)
-│   ├── shorten.go               #   POST /shorten
+│   ├── shorten.go               #   POST /api/shorten
 │   ├── redirect.go              #   GET /:code
-│   └── stats.go                 #   GET /stats/:code
+│   ├── stats.go                 #   GET /api/stats/:code
+│   └── frontend.go              #   HTMX frontend handlers
 │
 ├── repository/                  # Secondary adapter (data access)
 │   ├── scylla_url.go            #   ScyllaDB URL storage
@@ -48,6 +47,11 @@ internal/
 ├── config/                      # Environment configuration
 └── db/                          # ScyllaDB session & migrations
 
+web/                             # HTMX Frontend
+├── index.html                   # Main page with URL form
+├── result.html                  # Shorten result fragment
+└── stats.html                   # Statistics page
+
 benchmark/                       # Performance benchmarks
 scripts/                         # Seed data generator
 ```
@@ -56,8 +60,8 @@ scripts/                         # Seed data generator
 
 ```
 handler ──→ port ←── usecase
-              ↑
-          repository
+            ↑
+        repository
 ```
 
 Handlers and repositories depend on `port` interfaces — never on each other or on concrete implementations.
@@ -92,10 +96,10 @@ The server starts at `http://localhost:8080`.
 
 ## API
 
-### POST /shorten
+### POST /api/shorten
 
 ```bash
-curl -X POST http://localhost:8080/shorten \
+curl -X POST http://localhost:8080/api/shorten \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/very/long/path", "ttl_days": 30}'
 ```
@@ -121,10 +125,10 @@ curl -L http://localhost:8080/xK9a2b
 - `404` if not found, `410` if expired
 - Click analytics recorded asynchronously
 
-### GET /stats/:code
+### GET /api/stats/:code
 
 ```bash
-curl http://localhost:8080/stats/xK9a2b
+curl http://localhost:8080/api/stats/xK9a2b
 ```
 
 ```json
@@ -145,6 +149,35 @@ curl http://localhost:8080/stats/xK9a2b
 ```json
 { "status": "ok", "scylla": "ok", "redis": "ok" }
 ```
+
+## HTMX Frontend
+
+The frontend is built with HTMX for a modern single-page application experience without the complexity of a full JavaScript framework.
+
+### Features
+
+- **URL Shortening Form**: Enter a long URL and optional expiration
+- **Instant Results**: HTMX swaps the form with the shortened URL result
+- **Copy to Clipboard**: One-click copy for the short URL
+- **Statistics Page**: Visual chart showing clicks by day (Chart.js)
+- **Responsive Design**: Bootstrap 5 for mobile-friendly layout
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Main page with URL shortening form |
+| `/shorten` | HTMX endpoint for form submission |
+| `/stats/:code` | Statistics page for a short URL |
+| `/:code` | Redirect to original URL |
+
+### How It Works
+
+1. User enters a URL in the form
+2. HTMX sends a POST request to `/shorten` with JSON body
+3. Server returns HTML fragment rendered from `web/result.html`
+4. HTMX swaps the form with the result
+5. User can copy the short URL or view statistics
 
 ## Configuration
 
@@ -188,18 +221,6 @@ ScyllaDB tables designed for high write throughput and partition-aware queries:
 - **urls** — short code → original URL mapping (partition key: `code`)
 - **clicks** — click events partitioned by `(code, bucket)` where bucket = `YYYY-MM-DD`, 90-day TTL
 - **click_counts** — counter table for fast per-day aggregation
-
-## HTMX Frontend
-
-The project includes an HTMX-based frontend for a modern single-page experience:
-
-- **URL Shortening Form** - Enter a long URL with optional expiration
-- **Instant Results** - HTMX swaps the form with the shortened URL result
-- **Copy to Clipboard** - One-click copy for the short URL
-- **Statistics Page** - Visual chart showing clicks by day (Chart.js)
-- **Responsive Design** - Bootstrap 5 for mobile-friendly layout
-
-Access the frontend at `http://localhost:8080` after starting the server.
 
 ## Design Decisions
 
